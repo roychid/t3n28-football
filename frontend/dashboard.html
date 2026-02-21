@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — t3n28-football</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .quota-track { background:var(--surface2);border-radius:4px;height:8px;overflow:hidden;margin-top:8px; }
+  .quota-fill  { height:100%;border-radius:4px;transition:width .5s,background .3s; }
+  .status-row  { display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--border); }
+  .status-row:last-child { border-bottom:none; }
+  .sdot { width:8px;height:8px;border-radius:50%;margin-right:10px;flex-shrink:0; }
+  .feat-row { display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px; }
+  .feat-row:last-child { border-bottom:none; }
+  .upgrade-bar { background:linear-gradient(135deg,#22c55e12,#3b82f612);border:1px solid #22c55e25;border-radius:10px;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px;flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<script src="api.js"></script>
+<script>if (!requireAuth()) throw '';</script>
+<script src="sidebar.js"></script>
+
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title">Dashboard</div>
+    <div class="topbar-spacer"></div>
+    <span id="usage-pill" style="margin-right:10px;"></span>
+    <span id="api-pill" class="badge badge-muted" style="font-size:10px;">API: checking…</span>
+  </div>
+
+  <div class="page-content">
+
+    <div id="upgrade-bar" class="upgrade-bar" style="display:none;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-size:24px;">⬆️</span>
+        <div>
+          <div style="font-weight:700;font-size:14px;" id="bar-title"></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px;" id="bar-sub"></div>
+        </div>
+      </div>
+      <a href="pricing.html" class="btn btn-primary btn-sm" style="flex-shrink:0;">View Plans →</a>
+    </div>
+
+    <div class="page-header">
+      <h1 id="greeting">Dashboard</h1>
+      <p id="dash-date" style="font-size:13px;color:var(--muted);"></p>
+    </div>
+
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="stat-card">
+        <div class="stat-label">Live Now</div>
+        <div class="stat-value" id="stat-live" style="color:var(--red);">—</div>
+        <div class="stat-sub">Matches in progress</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Today's Fixtures</div>
+        <div class="stat-value" id="stat-fix">—</div>
+        <div class="stat-sub">Upcoming today</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Posts Sent</div>
+        <div class="stat-value" id="stat-posts">0</div>
+        <div class="stat-sub">All time</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">API Used Today</div>
+        <div class="stat-value" id="stat-api">—</div>
+        <div class="stat-sub" id="stat-api-sub">of — requests</div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:16px;">
+      <div class="card">
+        <div class="card-title">
+          🔴 Live Matches
+          <a href="live.html" style="font-size:12px;color:var(--green);text-decoration:none;">All →</a>
+        </div>
+        <div id="dash-live"><div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading…</div></div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">
+          📅 Today's Fixtures
+          <button class="btn btn-secondary btn-sm" onclick="copyFixtures()">📋 Copy</button>
+        </div>
+        <div id="dash-fix"><div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading…</div></div></div>
+      </div>
+    </div>
+
+    <div class="grid-2" style="margin-bottom:16px;">
+      <div class="card">
+        <div class="card-title">
+          📡 My API Quota Today
+          <span id="quota-badge" class="badge badge-muted" style="font-size:9px;"></span>
+        </div>
+        <div style="display:flex;align-items:baseline;gap:6px;">
+          <span id="q-count" style="font-size:32px;font-weight:800;font-family:'JetBrains Mono',monospace;">—</span>
+          <span id="q-of"    style="font-size:13px;color:var(--muted);">/ —</span>
+        </div>
+        <div class="quota-track"><div class="quota-fill" id="q-bar" style="width:0%;background:var(--green);"></div></div>
+        <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:11px;color:var(--muted);">
+          <span id="q-left">Loading…</span>
+          <span>Resets midnight UTC</span>
+        </div>
+        <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;font-size:12px;color:var(--muted);">
+          Cache TTL: <strong id="q-ttl" style="color:var(--text);"></strong> — one fetch serves all users
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">
+          📤 Recent Posts
+          <a href="analytics.html" style="font-size:12px;color:var(--green);text-decoration:none;" id="analytics-link">History →</a>
+        </div>
+        <div id="dash-posts">
+          <div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">No posts yet</div><div class="empty-sub">Use <a href="messages.html" style="color:var(--green);">Messages</a> or <a href="live.html" style="color:var(--green);">Live</a> to send.</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">⚙️ System Status</div>
+        <div class="status-row"><div style="display:flex;align-items:center;"><div class="sdot" id="dot-api" style="background:var(--muted);"></div><span style="font-size:13px;">Football API</span></div><span id="st-api" class="badge badge-muted">Checking…</span></div>
+        <div class="status-row"><div style="display:flex;align-items:center;"><div class="sdot" id="dot-tg"  style="background:var(--muted);"></div><span style="font-size:13px;">Telegram Bot</span></div><span id="st-tg"  class="badge badge-muted">Not configured</span></div>
+        <div class="status-row"><div style="display:flex;align-items:center;"><div class="sdot" id="dot-lg"  style="background:var(--muted);"></div><span style="font-size:13px;">Active Leagues</span></div><span id="st-lg"  class="badge badge-muted">None selected</span></div>
+        <div class="status-row"><div style="display:flex;align-items:center;"><div class="sdot" id="dot-pl"  style="background:var(--muted);"></div><span style="font-size:13px;">Your Plan</span></div><span id="st-pl"  class="badge badge-muted">—</span></div>
+      </div>
+      <div class="card">
+        <div class="card-title">
+          🎯 Plan Features
+          <a href="pricing.html" id="plan-upgrade" style="font-size:12px;color:var(--green);text-decoration:none;">Upgrade →</a>
+        </div>
+        <div id="plan-feats"><div class="empty-state"><div class="empty-icon">⏳</div></div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+<script src="api.js"></script>
+<script>
+const TTL_LABELS = { free:'10 min (cached)', starter:'5 min (cached)', pro:'2 min (cached)', premium:'60 sec (near-live)' };
+const BUDGET     = { free:50, starter:200, pro:500, premium:2000 };
+let   fixtureText = '';
+
+document.addEventListener('DOMContentLoaded', async () => {
+  const user = Auth.getUser();
+  const tier = Auth.getTier();
+  const cfg  = getTierConfig();
+
+  // Greeting
+  const h = new Date().getHours();
+  const g = h<12?'Good morning':h<18?'Good afternoon':'Good evening';
+  document.getElementById('greeting').textContent  = `${g}, ${(user.name||'').split(' ')[0]} 👋`;
+  document.getElementById('dash-date').textContent = new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  // Upgrade bar
+  const msgs = {
+    free:    ['You\'re on the Free plan', 'Upgrade to Starter for Telegram, top 15 leagues & your own links.'],
+    starter: ['You\'re on Starter', 'Upgrade to Pro for football news, auto-scheduling & 3 channels.'],
+    pro:     ['You\'re on Pro', 'Upgrade to Premium for goal videos, highlights & unlimited channels.'],
+  };
+  if (msgs[tier]) {
+    document.getElementById('upgrade-bar').style.display = 'flex';
+    document.getElementById('bar-title').textContent = msgs[tier][0];
+    document.getElementById('bar-sub').textContent   = msgs[tier][1];
+  }
+
+  // Plan status
+  const tc = cfg.color || '#64748b';
+  setStatus('st-pl', (cfg.label||tier) + ' — $' + (cfg.price||0) + '/mo', 'green');
+  dot('dot-pl', tc);
+  if (tier === 'premium') document.getElementById('plan-upgrade').style.display = 'none';
+
+  // Quota card
+  const quotaBadge = document.getElementById('quota-badge');
+  quotaBadge.textContent  = cfg.label || tier;
+  quotaBadge.style.cssText = `background:${tc}22;color:${tc};border:1px solid ${tc}44;`;
+  document.getElementById('q-ttl').textContent = TTL_LABELS[tier] || '10 min';
+
+  // Analytics link gated
+  if (!cfg.analytics) document.getElementById('analytics-link').href = 'pricing.html';
+
+  // Local stats
+  const channels = DB.get('channels') || [];
+  const leagues  = DB.get('leagues')  || [];
+  const posts    = DB.get('posts')    || [];
+  document.getElementById('stat-posts').textContent = posts.length;
+
+  const tg = channels.find(c=>c.type==='telegram');
+  if (tg) { setStatus('st-tg','✅ '+tg.name,'green'); dot('dot-tg','var(--green)'); }
+  if (leagues.length) { setStatus('st-lg',leagues.length+' selected','green'); dot('dot-lg','var(--green)'); }
+
+  // Recent posts
+  if (posts.length > 0) {
+    document.getElementById('dash-posts').innerHTML = posts.slice(-5).reverse().map(p=>`
+      <div style="display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);min-width:40px;">${new Date(p.id).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</span>
+        <span style="font-size:12px;flex:1;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${(p.preview||'').replace(/\n/g,' ').substring(0,65)}</span>
+        <span class="badge badge-blue" style="font-size:9px;flex-shrink:0;">${p.platform||'—'}</span>
+      </div>`).join('');
+  }
+
+  // Quota
+  loadQuota(tier);
+
+  // Plan features
+  renderFeatures(tier, cfg);
+
+  // API data
+  loadData(leagues.map(l=>l.id), tier);
+});
+
+async function loadQuota(tier) {
+  try {
+    const u     = await api.get('/usage/me');
+    const pct   = Math.min(100, (u.count/u.limit)*100);
+    const color = pct>=100?'var(--red)':pct>=80?'var(--yellow)':'var(--green)';
+    document.getElementById('q-count').textContent = u.count;
+    document.getElementById('q-of').textContent    = '/ ' + u.limit + ' requests';
+    document.getElementById('q-bar').style.width      = pct + '%';
+    document.getElementById('q-bar').style.background = color;
+    document.getElementById('q-left').textContent      = u.remaining + ' remaining today';
+    document.getElementById('stat-api').textContent    = u.count;
+    document.getElementById('stat-api-sub').textContent= 'of ' + u.limit + ' limit';
+  } catch(e) {}
+}
+
+async function loadData(leagueIds, tier) {
+  // Live
+  try {
+    const data  = await footballGet('/fixtures?live=all');
+    const all   = data.response || [];
+    let shown   = leagueIds.length ? all.filter(f=>leagueIds.includes(f.league.id)) : all;
+    shown = shown.filter(f=>canUseLeague(f.league.id));
+
+    document.getElementById('stat-live').textContent = all.length;
+    setStatus('st-api','Connected','green'); dot('dot-api','var(--green)');
+    document.getElementById('api-pill').textContent = '✅ API';
+    document.getElementById('api-pill').className   = 'badge badge-green';
+
+    const el = document.getElementById('dash-live');
+    if (!shown.length) {
+      el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚽</div><div class="empty-title">No live matches right now</div></div>`;
+    } else {
+      el.innerHTML = shown.slice(0,6).map(f => {
+        const goals = (f.events||[]).filter(e=>e.type==='Goal'&&e.detail!=='Missed Penalty');
+        const last  = goals[goals.length-1];
+        return `<div style="padding:9px 0;border-bottom:1px solid var(--border);">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span class="badge badge-red" style="font-size:9px;">LIVE</span>
+            <span style="font-size:11px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.league.name}</span>
+            <span style="font-family:'JetBrains Mono',monospace;font-weight:700;color:var(--green);">${f.goals.home??0}–${f.goals.away??0}</span>
+            <span style="font-size:11px;color:var(--yellow);min-width:28px;text-align:right;">${f.fixture.status.elapsed}'</span>
+          </div>
+          <div style="font-size:13px;font-weight:600;margin-top:3px;">${f.teams.home.name} vs ${f.teams.away.name}</div>
+          ${last?`<div style="font-size:11px;color:var(--yellow);margin-top:2px;">⚽ ${last.player?.name||''}${last.assist?.name?' · 🅰️ '+last.assist.name:''}</div>`:''}
+        </div>`;
+      }).join('');
+    }
+  } catch(e) {
+    setStatus('st-api','Error','red'); dot('dot-api','var(--red)');
+    document.getElementById('api-pill').textContent = '❌ API';
+    document.getElementById('api-pill').className   = 'badge badge-red';
+    document.getElementById('stat-live').textContent = '—';
+    document.getElementById('dash-live').innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">${e.message}</div></div>`;
+  }
+
+  // Fixtures
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const data  = await footballGet(`/fixtures?date=${today}&status=NS`);
+    const all   = data.response || [];
+    let shown   = leagueIds.length ? all.filter(f=>leagueIds.includes(f.league.id)) : all.slice(0,20);
+    shown = shown.filter(f=>canUseLeague(f.league.id));
+
+    document.getElementById('stat-fix').textContent = shown.length;
+
+    // Build copy text
+    const dateLabel = new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
+    fixtureText = `📅 TODAY'S FIXTURES — ${dateLabel}\n${'━'.repeat(32)}\n\n`;
+    const byLeague = {};
+    shown.forEach(f => { if (!byLeague[f.league.name]) byLeague[f.league.name]=[]; byLeague[f.league.name].push(f); });
+    Object.entries(byLeague).forEach(([lg,ms]) => {
+      fixtureText += `🏆 ${lg}\n`;
+      ms.forEach(f => {
+        const t = new Date(f.fixture.date).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+        fixtureText += `  ⏰ ${t}  ${f.teams.home.name} vs ${f.teams.away.name}\n`;
+      });
+      fixtureText += '\n';
+    });
+    fixtureText = fixtureText.trim();
+
+    const el = document.getElementById('dash-fix');
+    if (!shown.length) {
+      el.innerHTML = `<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-title">No fixtures today</div><div class="empty-sub">Select leagues in <a href="leagues.html" style="color:var(--green);">Leagues</a>.</div></div>`;
+    } else {
+      el.innerHTML = shown.slice(0,8).map(f => {
+        const t = new Date(f.fixture.date).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+        return `<div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);min-width:36px;">${t}</span>
+          <span style="font-size:11px;color:var(--muted);min-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.league.name}</span>
+          <span style="flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.teams.home.name} vs ${f.teams.away.name}</span>
+        </div>`;
+      }).join('') + (shown.length>8?`<div style="padding:8px 0;font-size:12px;color:var(--muted);text-align:center;">+${shown.length-8} more — <a href="live.html" style="color:var(--green);">view all</a></div>`:'');
+    }
+  } catch(e) {
+    document.getElementById('dash-fix').innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">Could not load fixtures</div></div>`;
+  }
+}
+
+function renderFeatures(tier, cfg) {
+  const rows = [
+    ['Leagues',            tier==='free'?'Non-top-15 only':tier==='starter'?'Top 15 (max 5)':tier==='pro'?'Top 15 (max 15)':'All leagues'],
+    ['Telegram channels',  !cfg.telegram?'❌ None':cfg.channels>=999?'✅ Unlimited':'✅ Up to '+cfg.channels],
+    ['Affiliate links',    cfg.affiliate==='own'?'✅ Your own links':'⚠️ Owner links'],
+    ['Analytics',          !cfg.analytics?'❌':cfg.analytics==='basic'?'✅ Basic':'✅ Full'],
+    ['Auto-schedule',      cfg.schedule?'✅':'❌ Pro & Premium only'],
+    ['Football news',      cfg.football_news?'✅':'❌ Pro & Premium only'],
+    ['Goal videos',        cfg.goal_videos?'✅':'❌ Premium only'],
+    ['Highlights',         cfg.highlights?'✅':'❌ Premium only'],
+    ['Ads',                cfg.ads?'📢 Ad-supported':'✅ Ad-free'],
+    ['API requests/day',   (BUDGET[tier]||50).toLocaleString()+' reqs'],
+  ];
+  document.getElementById('plan-feats').innerHTML = rows.map(([l,v])=>{
+    const dim = v.startsWith('❌')||v.startsWith('⚠️')||v.startsWith('📢');
+    return `<div class="feat-row"><span style="color:var(--muted);">${l}</span><span style="font-weight:600;color:${dim?'var(--muted)':'var(--text)'};text-align:right;max-width:55%;">${v}</span></div>`;
+  }).join('');
+}
+
+function copyFixtures() {
+  if (!fixtureText) { toast('Fixtures not loaded yet','error'); return; }
+  copyText(fixtureText, 'Fixtures copied!');
+}
+
+function setStatus(id, text, color) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text;
+  el.className   = `badge badge-${color}`;
+}
+function dot(id, color) {
+  const el = document.getElementById(id);
+  if (el) el.style.background = color;
+}
+</script>
+</body>
+</html>

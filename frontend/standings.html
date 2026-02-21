@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Standings — t3n28-football</title>
+<link rel="stylesheet" href="style.css">
+<script src="api.js"></script>
+<script>if (!requireAuth()) throw '';</script>
+<style>
+  .league-btn { padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all .15s; }
+  .league-btn.active { background:var(--green-bg);border-color:var(--green);color:var(--green); }
+  .form-badge { width:22px;height:22px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:700; }
+  .form-W { background:#22c55e22;color:var(--green); }
+  .form-D { background:#eab30822;color:var(--yellow); }
+  .form-L { background:#ef444422;color:var(--red); }
+</style>
+</head>
+<body>
+<script src="sidebar.js"></script>
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title">📋 Standings</div>
+    <div class="topbar-spacer"></div>
+    <span id="usage-pill" style="margin-right:8px;"></span>
+  </div>
+  <div class="page-content">
+    <div class="page-header">
+      <h1>League Standings</h1>
+      <p>Live table with form, copyable for WhatsApp/Telegram.</p>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;" id="league-buttons"></div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <select class="form-select" id="season-sel" style="max-width:150px;" onchange="loadStandings()">
+          <option value="2024">2024/25</option>
+          <option value="2023">2023/24</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="copyTable()">📋 Copy Table</button>
+        <button class="btn btn-secondary btn-sm" onclick="sendToTelegram()">📤 Send to Telegram</button>
+      </div>
+      <div id="standings-area">
+        <div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">Select a league above</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+const TOP_LEAGUES = [
+  { id:39, name:'Premier League' }, { id:140, name:'La Liga' },
+  { id:135, name:'Serie A' },       { id:78,  name:'Bundesliga' },
+  { id:61,  name:'Ligue 1' },       { id:2,   name:'Champions League' },
+  { id:3,   name:'Europa League' }, { id:88,  name:'Eredivisie' },
+  { id:94,  name:'Primeira Liga' }, { id:144, name:'Belgian Pro' },
+];
+
+let activeId = null, standingsText = '';
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadUsagePill();
+  const el = document.getElementById('league-buttons');
+  TOP_LEAGUES.filter(l => canUseLeague(l.id)).forEach(l => {
+    const b = document.createElement('button');
+    b.className   = 'league-btn';
+    b.textContent = l.name;
+    b.onclick     = () => { activeId = l.id; document.querySelectorAll('.league-btn').forEach(x=>x.classList.remove('active')); b.classList.add('active'); loadStandings(); };
+    el.appendChild(b);
+  });
+});
+
+async function loadStandings() {
+  if (!activeId) return;
+  const season = document.getElementById('season-sel').value;
+  const el = document.getElementById('standings-area');
+  el.innerHTML = '<div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading…</div></div>';
+  try {
+    const data  = await footballGet(`/standings?league=${activeId}&season=${season}`);
+    const list  = data.response?.[0]?.league?.standings?.[0] || [];
+    const lname = data.response?.[0]?.league?.name || '';
+
+    if (!list.length) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">No standings data</div></div>'; return; }
+
+    // Build copy text
+    const now = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+    standingsText = `📊 ${lname.toUpperCase()} STANDINGS\n${now}\n${'━'.repeat(32)}\n\n`;
+    standingsText += `${'Pos'.padEnd(4)}${'Team'.padEnd(22)}${'P'.padEnd(4)}${'W'.padEnd(4)}${'D'.padEnd(4)}${'L'.padEnd(4)}${'GD'.padEnd(6)}${'Pts'}\n`;
+    standingsText += '─'.repeat(50) + '\n';
+    list.slice(0,10).forEach(t => {
+      const gd = (t.goalsDiff >= 0 ? '+' : '') + t.goalsDiff;
+      standingsText += `${String(t.rank).padEnd(4)}${t.team.name.padEnd(22)}${String(t.all.played).padEnd(4)}${String(t.all.win).padEnd(4)}${String(t.all.draw).padEnd(4)}${String(t.all.lose).padEnd(4)}${gd.padEnd(6)}${t.points}\n`;
+    });
+    standingsText += '\n— t3n28-football';
+
+    // Render table
+    el.innerHTML = `<div style="overflow-x:auto;"><table class="table">
+      <thead><tr>
+        <th style="width:32px;">#</th>
+        <th>Team</th>
+        <th title="Played">P</th>
+        <th title="Won">W</th>
+        <th title="Draw">D</th>
+        <th title="Lost">L</th>
+        <th title="Goals For">GF</th>
+        <th title="Goals Against">GA</th>
+        <th title="Goal Difference">GD</th>
+        <th title="Points">Pts</th>
+        <th>Form</th>
+      </tr></thead>
+      <tbody>${list.map(t => {
+        const isUCL  = t.rank <= 4;
+        const isUEL  = t.rank === 5 || t.rank === 6;
+        const isRel  = t.rank > list.length - 3;
+        const clrBar = isUCL ? 'var(--green)' : isUEL ? 'var(--yellow)' : isRel ? 'var(--red)' : 'transparent';
+        const gd     = (t.goalsDiff >= 0 ? '+' : '') + t.goalsDiff;
+        const form   = (t.form || '').split('').slice(-5).map(f =>
+          `<span class="form-badge form-${f}">${f}</span>`).join('');
+        return `<tr>
+          <td style="padding-left:0;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <div style="width:3px;height:24px;background:${clrBar};border-radius:2px;flex-shrink:0;"></div>
+              <span style="font-weight:700;font-size:13px;">${t.rank}</span>
+            </div>
+          </td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <img src="${t.team.logo}" width="20" height="20" style="object-fit:contain;" onerror="this.style.display='none'">
+              <span style="font-weight:600;">${t.team.name}</span>
+            </div>
+          </td>
+          <td>${t.all.played}</td>
+          <td style="color:var(--green);">${t.all.win}</td>
+          <td style="color:var(--yellow);">${t.all.draw}</td>
+          <td style="color:var(--red);">${t.all.lose}</td>
+          <td>${t.all.goals.for}</td>
+          <td>${t.all.goals.against}</td>
+          <td style="font-weight:600;color:${t.goalsDiff>=0?'var(--green)':'var(--red)'};">${gd}</td>
+          <td style="font-weight:800;font-family:'JetBrains Mono',monospace;">${t.points}</td>
+          <td><div style="display:flex;gap:2px;">${form}</div></td>
+        </tr>`;
+      }).join('')}</tbody></table></div>
+      <div style="margin-top:12px;font-size:11px;color:var(--muted);display:flex;gap:16px;">
+        <span><span style="color:var(--green);">■</span> Champions League</span>
+        <span><span style="color:var(--yellow);">■</span> Europa League</span>
+        <span><span style="color:var(--red);">■</span> Relegation</span>
+      </div>`;
+  } catch(e) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">${e.message}</div></div>`;
+  }
+}
+
+function copyTable() {
+  if (!standingsText) { toast('Load a league first','error'); return; }
+  copyText(standingsText, 'Standings copied!');
+}
+
+async function sendToTelegram() {
+  if (!standingsText) { toast('Load a league first','error'); return; }
+  if (!isFeatureAllowed('telegram')) { toast('Upgrade to send to Telegram','error'); return; }
+  const results = await sendToAllChannels(standingsText);
+  const ok = results.filter(r=>r.ok).length;
+  toast(`Sent to ${ok}/${results.length} channels`);
+}
+</script>
+</body>
+</html>

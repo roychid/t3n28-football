@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign In — t3n28-football</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  body { display:flex;align-items:center;justify-content:center;min-height:100vh; }
+  .auth-box { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:36px;width:100%;max-width:400px; }
+  .auth-logo { text-align:center;font-size:28px;font-weight:800;margin-bottom:6px; }
+  .auth-logo span { color:var(--green); }
+  .auth-sub { text-align:center;color:var(--muted);font-size:13px;margin-bottom:28px; }
+  .auth-err { background:#ef444415;border:1px solid var(--red);color:var(--red);border-radius:6px;padding:10px 14px;font-size:13px;margin-bottom:14px;display:none; }
+</style>
+</head>
+<body>
+<script src="api.js"></script>
+<div class="auth-box">
+  <div class="auth-logo">⚽ <span>t3n28</span>-football</div>
+  <div class="auth-sub">AutoPost SaaS — Sign in to your account</div>
+
+  <div class="auth-err" id="err"></div>
+
+  <div class="form-group">
+    <label class="form-label">Email</label>
+    <input class="form-input" id="email" type="email" placeholder="you@email.com" autocomplete="email">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Password</label>
+    <input class="form-input" id="password" type="password" placeholder="••••••••" autocomplete="current-password">
+  </div>
+
+  <button class="btn btn-primary btn-full" id="btn" onclick="doLogin()">Sign In</button>
+
+  <div style="text-align:center;margin-top:20px;font-size:13px;color:var(--muted);">
+    No account? <a href="register.html" style="color:var(--green);text-decoration:none;">Register free</a>
+    &nbsp;·&nbsp;
+    <a href="pricing.html" style="color:var(--muted);text-decoration:none;">Pricing</a>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script>
+// Already logged in? redirect
+if (Auth.isLoggedIn()) window.location.href = 'dashboard.html';
+
+document.getElementById('password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+async function doLogin() {
+  const email    = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const btn      = document.getElementById('btn');
+  const err      = document.getElementById('err');
+  err.style.display = 'none';
+
+  if (!email || !password) { showErr('Please enter email and password'); return; }
+
+  btn.disabled    = true;
+  btn.textContent = 'Signing in...';
+
+  try {
+    const data = await authLogin(email, password);
+    window.location.href = data.is_admin ? 'admin.html' : 'dashboard.html';
+  } catch(e) {
+    showErr(e.message);
+    btn.disabled    = false;
+    btn.textContent = 'Sign In';
+  }
+}
+
+function showErr(msg) {
+  const el = document.getElementById('err');
+  el.textContent    = '⚠️ ' + msg;
+  el.style.display  = 'block';
+}
+</script>
+</body>
+</html>

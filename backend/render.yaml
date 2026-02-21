@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: t3n28-football-api
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FOOTBALL_API_KEY
+        value: 9840d945cf9472498c43556397d6386f
+      - key: ADMIN_EMAIL
+        value: chidhungwanaroy4@gmail.com
+      - key: OWNER_AFFILIATE
+        value: https://t.me/t3n28football
+      - key: DB_PATH
+        value: /data/t3n28.db
+    disk:
+      name: t3n28-db
+      mountPath: /data
+      sizeGB: 1

@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Notifications — t3n28-football</title>
+<link rel="stylesheet" href="style.css">
+<script src="api.js"></script>
+<script>if (!requireAuth()) throw '';</script>
+</head>
+<body>
+<script src="sidebar.js"></script>
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title">🔔 Notifications</div>
+    <div class="topbar-spacer"></div>
+    <button class="btn btn-secondary btn-sm" onclick="markAllRead()">Mark all read</button>
+  </div>
+  <div class="page-content">
+    <div class="page-header">
+      <h1>Notifications</h1>
+      <p>Plan changes and system messages from admin.</p>
+    </div>
+    <div class="card" id="notif-list">
+      <div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading…</div></div>
+    </div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+document.addEventListener('DOMContentLoaded', loadNotifs);
+
+async function loadNotifs() {
+  try {
+    const notifs = await api.get('/notifications');
+    const el = document.getElementById('notif-list');
+    if (!notifs.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">No notifications yet</div></div>';
+      return;
+    }
+    el.innerHTML = notifs.map(n => {
+      const isUnread = !n.read;
+      return `<div style="display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--border);${isUnread?'background:var(--green-bg);margin:0 -20px;padding:14px 20px;':''}">
+        <span style="font-size:20px;">${n.type.includes('approved')?'🎉':n.type.includes('rejected')?'❌':n.type.includes('changed')?'🔄':'🔔'}</span>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:${isUnread?700:400};color:var(--text);">${n.message}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">${new Date(n.created_at).toLocaleString()}</div>
+        </div>
+        ${isUnread?`<button class="btn btn-secondary btn-sm" onclick="markRead(${n.id},this)">Mark read</button>`:'<span class="badge badge-muted" style="flex-shrink:0;">Read</span>'}
+      </div>`;
+    }).join('');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function markRead(id, btn) {
+  try {
+    await api.post(`/notifications/${id}/read`);
+    btn.closest('div[style]').style.background = '';
+    btn.remove();
+    loadNotifBadge();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function markAllRead() {
+  try {
+    await api.post('/notifications/read-all');
+    toast('All marked as read');
+    loadNotifs();
+    loadNotifBadge();
+  } catch(e) { toast(e.message,'error'); }
+}
+</script>
+</body>
+</html>

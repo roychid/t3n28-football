@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Register — t3n28-football</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  body { display:flex;align-items:center;justify-content:center;min-height:100vh; }
+  .auth-box { background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:36px;width:100%;max-width:440px; }
+  .auth-logo { text-align:center;font-size:26px;font-weight:800;margin-bottom:6px; }
+  .auth-logo span { color:var(--green); }
+  .auth-sub { text-align:center;color:var(--muted);font-size:13px;margin-bottom:24px; }
+  .auth-err { background:#ef444415;border:1px solid var(--red);color:var(--red);border-radius:6px;padding:10px 14px;font-size:13px;margin-bottom:14px;display:none; }
+  .plan-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:6px; }
+  .plan-opt { border:1px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;transition:all 0.15s;text-align:center; }
+  .plan-opt:hover { border-color:var(--muted); }
+  .plan-opt.selected { border-color:var(--green);background:var(--green-bg); }
+  .plan-opt .p-name { font-weight:700;font-size:13px; }
+  .plan-opt .p-price { font-size:11px;color:var(--muted);margin-top:2px; }
+</style>
+</head>
+<body>
+<script src="api.js"></script>
+<div class="auth-box">
+  <div class="auth-logo">⚽ <span>t3n28</span>-football</div>
+  <div class="auth-sub">Create your free account</div>
+
+  <div class="auth-err" id="err"></div>
+
+  <div class="form-group">
+    <label class="form-label">Full Name</label>
+    <input class="form-input" id="name" type="text" placeholder="Your name">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Email</label>
+    <input class="form-input" id="email" type="email" placeholder="you@email.com">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Password</label>
+    <input class="form-input" id="password" type="password" placeholder="Min 6 characters">
+  </div>
+  <div class="form-group">
+    <label class="form-label">WhatsApp (optional — for upgrade contact)</label>
+    <input class="form-input" id="whatsapp" type="text" placeholder="+263 7X XXX XXXX">
+  </div>
+
+  <div class="form-group">
+    <label class="form-label">Interested plan</label>
+    <div class="plan-grid">
+      <div class="plan-opt selected" data-plan="free" onclick="selectPlan(this)">
+        <div class="p-name">Free</div>
+        <div class="p-price">$0/mo</div>
+      </div>
+      <div class="plan-opt" data-plan="starter" onclick="selectPlan(this)">
+        <div class="p-name" style="color:#3b82f6;">Starter</div>
+        <div class="p-price">$3/mo</div>
+      </div>
+      <div class="plan-opt" data-plan="pro" onclick="selectPlan(this)">
+        <div class="p-name" style="color:#22c55e;">Pro</div>
+        <div class="p-price">$5/mo</div>
+      </div>
+      <div class="plan-opt" data-plan="premium" onclick="selectPlan(this)">
+        <div class="p-name" style="color:#f59e0b;">Premium</div>
+        <div class="p-price">$10/mo</div>
+      </div>
+    </div>
+    <div class="form-hint">You start on Free. Admin will contact you to activate paid plan.</div>
+  </div>
+
+  <button class="btn btn-primary btn-full" id="btn" onclick="doRegister()">Create Account</button>
+
+  <div style="text-align:center;margin-top:16px;font-size:13px;color:var(--muted);">
+    Already have an account? <a href="login.html" style="color:var(--green);text-decoration:none;">Sign in</a>
+    &nbsp;·&nbsp;
+    <a href="pricing.html" style="color:var(--muted);text-decoration:none;">Compare plans</a>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script>
+if (Auth.isLoggedIn()) window.location.href = 'dashboard.html';
+
+// Auto-select plan from URL param
+const urlPlan = new URLSearchParams(window.location.search).get('plan');
+if (urlPlan) {
+  document.querySelectorAll('.plan-opt').forEach(el => {
+    el.classList.toggle('selected', el.dataset.plan === urlPlan);
+  });
+}
+
+function selectPlan(el) {
+  document.querySelectorAll('.plan-opt').forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+async function doRegister() {
+  const name     = document.getElementById('name').value.trim();
+  const email    = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const whatsapp = document.getElementById('whatsapp').value.trim();
+  const planEl   = document.querySelector('.plan-opt.selected');
+  const plan     = planEl ? planEl.dataset.plan : 'free';
+  const btn      = document.getElementById('btn');
+
+  if (!name || !email || !password) { showErr('Please fill in all required fields'); return; }
+
+  btn.disabled    = true;
+  btn.textContent = 'Creating account...';
+
+  try {
+    const data = await authRegister(email, password, name, whatsapp, plan);
+    window.location.href = 'dashboard.html';
+  } catch(e) {
+    showErr(e.message);
+    btn.disabled    = false;
+    btn.textContent = 'Create Account';
+  }
+}
+
+function showErr(msg) {
+  const el = document.getElementById('err');
+  el.textContent   = '⚠️ ' + msg;
+  el.style.display = 'block';
+}
+</script>
+</body>
+</html>

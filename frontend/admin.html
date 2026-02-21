@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Panel — t3n28-football</title>
+<link rel="stylesheet" href="style.css">
+<style>
+  .tab-nav { display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid var(--border);padding-bottom:0; }
+  .tab-btn { padding:9px 16px;border:none;background:none;color:var(--muted);font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px; }
+  .tab-btn.active { color:var(--green);border-bottom-color:var(--green); }
+  .tab-pane { display:none; }
+  .tab-pane.active { display:block; }
+  .user-badge { padding:2px 8px;border-radius:4px;font-size:9px;font-weight:700;font-family:'JetBrains Mono',monospace;text-transform:uppercase; }
+  .req-card { background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:10px; }
+  .tier-select { background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:5px 8px;color:var(--text);font-size:12px;cursor:pointer; }
+  .quota-mini-track { background:var(--surface2);border-radius:3px;height:5px;overflow:hidden;margin-top:3px; }
+  .quota-mini-fill  { height:100%;border-radius:3px; }
+</style>
+</head>
+<body>
+<script src="api.js"></script>
+<script>if (!requireAdminAuth()) throw '';</script>
+<script src="sidebar.js"></script>
+
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title">🛡️ Admin Panel</div>
+    <div class="topbar-spacer"></div>
+    <span id="pending-badge" class="badge badge-red" style="display:none;"></span>
+  </div>
+
+  <div class="page-content">
+    <!-- Stats row -->
+    <div class="grid-4" style="margin-bottom:16px;">
+      <div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-value" id="s-users">—</div></div>
+      <div class="stat-card"><div class="stat-label">Pending Requests</div><div class="stat-value" id="s-pending" style="color:var(--yellow);">—</div></div>
+      <div class="stat-card"><div class="stat-label">MRR (est.)</div><div class="stat-value" id="s-mrr" style="color:var(--green);">—</div></div>
+      <div class="stat-card"><div class="stat-label">API Calls Today</div><div class="stat-value" id="s-api">—</div></div>
+    </div>
+
+    <!-- Tier breakdown -->
+    <div class="card" style="margin-bottom:16px;">
+      <div class="card-title">Tier Breakdown</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;" id="tier-breakdown"></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-nav">
+      <button class="tab-btn active" onclick="switchTab('requests')">📨 Pending Requests <span id="req-count-badge"></span></button>
+      <button class="tab-btn" onclick="switchTab('users')">👥 All Users</button>
+      <button class="tab-btn" onclick="switchTab('apiusage')">📡 API Usage</button>
+    </div>
+
+    <!-- Pending requests -->
+    <div class="tab-pane active" id="tab-requests">
+      <div id="requests-list"><div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading…</div></div></div>
+    </div>
+
+    <!-- All users -->
+    <div class="tab-pane" id="tab-users">
+      <div style="margin-bottom:12px;display:flex;gap:8px;">
+        <input class="form-input" id="user-search" placeholder="Search by name or email…" oninput="filterUsers()" style="max-width:320px;">
+        <select class="tier-select" id="tier-filter" onchange="filterUsers()">
+          <option value="">All tiers</option>
+          <option value="free">Free</option>
+          <option value="starter">Starter</option>
+          <option value="pro">Pro</option>
+          <option value="premium">Premium</option>
+        </select>
+      </div>
+      <div id="users-table"><div class="empty-state"><div class="empty-icon">⏳</div><div class="empty-title">Loading…</div></div></div>
+    </div>
+
+    <!-- API Usage -->
+    <div class="tab-pane" id="tab-apiusage">
+      <div class="grid-4" style="margin-bottom:16px;">
+        <div class="stat-card"><div class="stat-label">Total Today</div><div class="stat-value" id="au-total">—</div><div class="stat-sub">of 75,000 limit</div></div>
+        <div class="stat-card"><div class="stat-label">Real API Calls</div><div class="stat-value" id="au-real" style="color:var(--yellow);">—</div></div>
+        <div class="stat-card"><div class="stat-label">Cache Hits</div><div class="stat-value" id="au-cache" style="color:var(--green);">—</div></div>
+        <div class="stat-card"><div class="stat-label">Cache Rate</div><div class="stat-value" id="au-rate">—</div></div>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title">Daily Quota (75,000)</div>
+        <div style="background:var(--surface2);border-radius:4px;height:10px;overflow:hidden;margin-bottom:6px;"><div id="quota-bar" style="height:100%;background:var(--green);border-radius:4px;width:0%;transition:width .5s;"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);"><span id="quota-label">—</span><span>Resets midnight UTC</span></div>
+      </div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-title">Last 7 Days</div>
+        <div id="usage-chart" style="display:flex;align-items:flex-end;gap:8px;height:100px;padding-bottom:20px;position:relative;"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Per-User Usage Today <button class="btn btn-secondary btn-sm" onclick="loadApiUsage()">↻ Refresh</button></div>
+        <div id="user-usage-table"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Tier change modal -->
+<div id="modal" style="display:none;position:fixed;inset:0;background:#0009;z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:28px;width:100%;max-width:400px;">
+    <div style="font-size:15px;font-weight:700;margin-bottom:4px;">Change User Tier</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:20px;" id="modal-email">—</div>
+    <div class="form-group">
+      <label class="form-label">New Tier</label>
+      <select class="form-select" id="modal-tier">
+        <option value="free">Free ($0)</option>
+        <option value="starter">Starter ($3)</option>
+        <option value="pro">Pro ($5)</option>
+        <option value="premium">Premium ($10)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Note (optional)</label>
+      <input class="form-input" id="modal-note" placeholder="e.g. Payment confirmed">
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="applyTierChange()">Apply Change</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<script>
+let allUsers = [], pendingReqs = [], modalUserId = null;
+const LIMIT_PER_TIER = { free:50, starter:200, pro:500, premium:2000 };
+const TIER_COLORS    = { free:'#64748b', starter:'#3b82f6', pro:'#22c55e', premium:'#f59e0b' };
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadStats();
+  loadRequests();
+  loadUsers();
+});
+
+async function loadStats() {
+  try {
+    const s = await api.get('/admin/stats');
+    document.getElementById('s-users').textContent   = s.total_users;
+    document.getElementById('s-pending').textContent = s.pending_reqs;
+    document.getElementById('s-mrr').textContent     = '$' + s.mrr;
+    document.getElementById('s-api').textContent     = s.api_today?.total?.toLocaleString() || '0';
+
+    if (s.pending_reqs > 0) {
+      const b = document.getElementById('pending-badge');
+      b.textContent    = s.pending_reqs + ' pending';
+      b.style.display  = 'inline-block';
+      const rc = document.getElementById('req-count-badge');
+      rc.textContent = `(${s.pending_reqs})`;
+      rc.style.color = 'var(--yellow)';
+    }
+
+    // Tier breakdown
+    const bp = document.getElementById('tier-breakdown');
+    bp.innerHTML = ['free','starter','pro','premium'].map(t => {
+      const n = s.tiers[t] || 0;
+      const c = TIER_COLORS[t];
+      return `<div style="text-align:center;padding:12px 20px;background:${c}11;border:1px solid ${c}33;border-radius:8px;">
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:${c};font-weight:700;">${t}</div>
+        <div style="font-size:26px;font-weight:800;font-family:'JetBrains Mono',monospace;color:${c};margin-top:4px;">${n}</div>
+        <div style="font-size:10px;color:var(--muted);">user${n!==1?'s':''}</div>
+      </div>`;
+    }).join('');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function loadRequests() {
+  try {
+    pendingReqs = await api.get('/admin/requests?status=pending');
+    const el = document.getElementById('requests-list');
+    if (!pendingReqs.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><div class="empty-title">No pending requests</div></div>';
+      return;
+    }
+    el.innerHTML = pendingReqs.map(r => `
+      <div class="req-card">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="font-weight:700;font-size:14px;">${r.name || '—'}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px;">${r.email}</div>
+            ${r.whatsapp ? `<div style="font-size:12px;color:var(--muted);">📱 ${r.whatsapp}</div>` : ''}
+            <div style="margin-top:8px;display:flex;gap:6px;align-items:center;">
+              <span style="font-size:11px;color:var(--muted);">Requesting:</span>
+              <span style="background:${TIER_COLORS[r.requested_tier]||'#64748b'}22;color:${TIER_COLORS[r.requested_tier]||'#64748b'};border:1px solid ${TIER_COLORS[r.requested_tier]||'#64748b'}44;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;text-transform:uppercase;">${r.requested_tier}</span>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;">Submitted: ${new Date(r.created_at).toLocaleString()}</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-shrink:0;">
+            <button class="btn btn-primary btn-sm" onclick="handleRequest(${r.id},'approve')">✅ Approve</button>
+            <button class="btn btn-danger btn-sm"  onclick="handleRequest(${r.id},'reject')">❌ Reject</button>
+          </div>
+        </div>
+      </div>`).join('');
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function handleRequest(id, action) {
+  const note = action === 'reject' ? prompt('Reason for rejection (optional):') || '' : '';
+  try {
+    await api.post('/admin/requests/action', { request_id: id, action, note });
+    toast(action === 'approve' ? '✅ Approved!' : '❌ Rejected');
+    loadRequests();
+    loadStats();
+    loadUsers();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+async function loadUsers() {
+  try {
+    allUsers = await api.get('/admin/users');
+    renderUsers(allUsers);
+  } catch(e) { toast(e.message,'error'); }
+}
+
+function filterUsers() {
+  const q    = document.getElementById('user-search').value.toLowerCase();
+  const tier = document.getElementById('tier-filter').value;
+  let filtered = allUsers;
+  if (q)    filtered = filtered.filter(u => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q));
+  if (tier) filtered = filtered.filter(u => u.tier === tier);
+  renderUsers(filtered);
+}
+
+function renderUsers(users) {
+  if (!users.length) {
+    document.getElementById('users-table').innerHTML = '<div class="empty-state"><div class="empty-icon">👥</div><div class="empty-title">No users found</div></div>';
+    return;
+  }
+  document.getElementById('users-table').innerHTML = `<div style="overflow-x:auto;"><table class="table">
+    <thead><tr><th>User</th><th>Tier</th><th>Status</th><th>Joined</th><th>Last Login</th><th>Actions</th></tr></thead>
+    <tbody>${users.map(u => {
+      const tc = TIER_COLORS[u.tier]||'#64748b';
+      const joined   = new Date(u.created_at).toLocaleDateString();
+      const lastLogin= u.last_login ? new Date(u.last_login).toLocaleDateString() : 'Never';
+      return `<tr>
+        <td>
+          <div style="font-weight:600;">${u.name||'—'}</div>
+          <div style="font-size:11px;color:var(--muted);">${u.email}</div>
+          ${u.whatsapp?`<div style="font-size:10px;color:var(--muted);">📱 ${u.whatsapp}</div>`:''}
+        </td>
+        <td><span style="background:${tc}22;color:${tc};border:1px solid ${tc}44;" class="user-badge">${u.tier}</span></td>
+        <td><span class="badge badge-${u.status==='active'?'green':'red'}">${u.status}</span></td>
+        <td style="font-size:12px;color:var(--muted);">${joined}</td>
+        <td style="font-size:12px;color:var(--muted);">${lastLogin}</td>
+        <td>
+          <div style="display:flex;gap:4px;flex-wrap:wrap;">
+            <button class="btn btn-secondary btn-sm" onclick="openModal(${u.id},'${u.email}','${u.tier}')">Change Tier</button>
+            <button class="btn btn-sm" style="background:${u.status==='active'?'#ef444415':'#22c55e15'};color:${u.status==='active'?'var(--red)':'var(--green)'};border:1px solid ${u.status==='active'?'#ef444430':'#22c55e30'};"
+              onclick="toggleStatus(${u.id},'${u.status}')">${u.status==='active'?'Disable':'Enable'}</button>
+          </div>
+        </td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+}
+
+async function toggleStatus(uid, current) {
+  const newStatus = current === 'active' ? 'disabled' : 'active';
+  if (!confirm(`${newStatus === 'disabled' ? 'Disable' : 'Enable'} this user?`)) return;
+  try {
+    await api.post('/admin/users/status', { user_id: uid, status: newStatus });
+    toast('User ' + newStatus);
+    loadUsers();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+function openModal(uid, email, currentTier) {
+  modalUserId = uid;
+  document.getElementById('modal-email').textContent = email;
+  document.getElementById('modal-tier').value = currentTier;
+  document.getElementById('modal-note').value = '';
+  document.getElementById('modal').style.display = 'flex';
+}
+
+function closeModal() {
+  document.getElementById('modal').style.display = 'none';
+  modalUserId = null;
+}
+
+async function applyTierChange() {
+  const tier = document.getElementById('modal-tier').value;
+  const note = document.getElementById('modal-note').value;
+  try {
+    await api.post('/admin/users/change-tier', { user_id: modalUserId, new_tier: tier, note });
+    toast('✅ Tier updated to ' + tier);
+    closeModal();
+    loadUsers();
+    loadStats();
+  } catch(e) { toast(e.message,'error'); }
+}
+
+// API Usage tab
+async function loadApiUsage() {
+  try {
+    const stats = await api.get('/admin/usage/daily?days=7');
+    const today = stats[0] || { total:0, cache_hits:0, real_calls:0 };
+
+    document.getElementById('au-total').textContent = today.total?.toLocaleString() || '0';
+    document.getElementById('au-real').textContent  = (today.real_calls||0).toLocaleString();
+    document.getElementById('au-cache').textContent = (today.cache_hits||0).toLocaleString();
+    const rate = today.total > 0 ? Math.round((today.cache_hits/today.total)*100) : 0;
+    document.getElementById('au-rate').textContent  = rate + '%';
+
+    const pct   = Math.min(100, ((today.total||0)/75000)*100);
+    const color = pct>=90?'var(--red)':pct>=70?'var(--yellow)':'var(--green)';
+    document.getElementById('quota-bar').style.width      = pct + '%';
+    document.getElementById('quota-bar').style.background = color;
+    document.getElementById('quota-label').textContent    = (today.total||0).toLocaleString() + ' used — ' + (75000-(today.total||0)).toLocaleString() + ' remaining';
+
+    // Chart
+    const chartEl = document.getElementById('usage-chart');
+    const maxVal  = Math.max(...stats.map(s=>s.total||0), 1);
+    chartEl.innerHTML = [...stats].reverse().map(s => {
+      const h = Math.max(6, Math.round(((s.total||0)/maxVal)*80));
+      const d = new Date(s.date+'T12:00:00').toLocaleDateString([],{weekday:'short'});
+      return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;position:relative;">
+        <span style="font-size:9px;color:var(--muted);font-family:'JetBrains Mono',monospace;">${s.total||''}</span>
+        <div style="width:100%;background:${(s.total||0)>0?'var(--green)':'var(--surface2)'};border-radius:3px 3px 0 0;height:${h}px;"></div>
+        <span style="position:absolute;bottom:-18px;font-size:9px;color:var(--muted);">${d}</span>
+      </div>`;
+    }).join('');
+
+    // Per user
+    const today_str = new Date().toISOString().split('T')[0];
+    const users  = await api.get('/admin/usage/users?date=' + today_str);
+    const uEl    = document.getElementById('user-usage-table');
+    if (!users.length) { uEl.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div><div class="empty-title">No usage data yet today</div></div>'; return; }
+
+    uEl.innerHTML = `<div style="overflow-x:auto;"><table class="table">
+      <thead><tr><th>#</th><th>User</th><th>Tier</th><th>Requests</th><th>Limit</th><th>Usage</th><th>Last Active</th></tr></thead>
+      <tbody>${users.map((u,i) => {
+        const lim   = LIMIT_PER_TIER[u.tier]||50;
+        const pct   = Math.min(100, Math.round((u.count/lim)*100));
+        const bclr  = pct>=100?'var(--red)':pct>=80?'var(--yellow)':'var(--green)';
+        const tc    = TIER_COLORS[u.tier]||'#64748b';
+        const time  = u.last_call ? new Date(u.last_call).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '—';
+        return `<tr>
+          <td style="color:var(--muted);font-size:12px;">${i+1}</td>
+          <td><div style="font-weight:600;font-size:13px;">${u.email}</div></td>
+          <td><span style="background:${tc}22;color:${tc};border:1px solid ${tc}44;" class="user-badge">${u.tier}</span></td>
+          <td style="font-family:'JetBrains Mono',monospace;font-weight:700;">${u.count}</td>
+          <td style="font-family:'JetBrains Mono',monospace;color:var(--muted);">${lim}</td>
+          <td style="min-width:90px;">
+            <div class="quota-mini-track"><div class="quota-mini-fill" style="width:${pct}%;background:${bclr};"></div></div>
+            <div style="font-size:10px;color:var(--muted);margin-top:2px;">${pct}%</div>
+          </td>
+          <td style="font-size:11px;color:var(--muted);">${time}</td>
+        </tr>`;
+      }).join('')}</tbody></table></div>`;
+  } catch(e) { toast(e.message,'error'); }
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    const tabs = ['requests','users','apiusage'];
+    b.classList.toggle('active', tabs[i]===name);
+  });
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-'+name).classList.add('active');
+  if (name === 'apiusage') loadApiUsage();
+}
+</script>
+</body>
+</html>
